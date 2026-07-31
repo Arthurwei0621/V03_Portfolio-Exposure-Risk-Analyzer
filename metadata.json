@@ -1,0 +1,8 @@
+{
+  "name": "Remix Portfolio Exposure Calculator",
+  "description": "A professional portfolio exposure calculator to analyze asset weightings, sector concentration, risk metrics, and simulate market scenarios.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
