@@ -43,56 +43,64 @@ app.get("/api/stock-price", async (req, res) => {
 
   // 1. Static Fallback Map for typical assets requested by user
   const DEFAULT_STOCK_PRICES: Record<string, { price: number; currency: string; companyName: string }> = {
-    "2330": { price: 2370, currency: "TWD", companyName: "台積電" },
-    "2330.TW": { price: 2370, currency: "TWD", companyName: "台積電" },
-    "0050": { price: 102.25, currency: "TWD", companyName: "元大台灣50" },
-    "0050.TW": { price: 102.25, currency: "TWD", companyName: "元大台灣50" },
+    "0050": { price: 102.85, currency: "TWD", companyName: "元大台灣50" },
+    "0050.TW": { price: 102.85, currency: "TWD", companyName: "元大台灣50" },
+    "00631L": { price: 33.70, currency: "TWD", companyName: "元大台灣50正2" },
+    "00631L.TW": { price: 33.70, currency: "TWD", companyName: "元大台灣50正2" },
+    "00685L": { price: 10.83, currency: "TWD", companyName: "群益臺灣加權正2" },
+    "00685L.TWO": { price: 10.83, currency: "TWD", companyName: "群益臺灣加權正2" },
+    "2884": { price: 36.25, currency: "TWD", companyName: "玉山金" },
+    "2884.TW": { price: 36.25, currency: "TWD", companyName: "玉山金" },
+    "6412": { price: 76.50, currency: "TWD", companyName: "群電" },
+    "6412.TWO": { price: 76.50, currency: "TWD", companyName: "群電" },
+    "2327": { price: 502.0, currency: "TWD", companyName: "國巨" },
+    "2327.TW": { price: 502.0, currency: "TWD", companyName: "國巨" },
+    "00981A": { price: 26.13, currency: "TWD", companyName: "主動統一台股增長" },
+    "00981A.TW": { price: 26.13, currency: "TWD", companyName: "主動統一台股增長" },
+    "2330": { price: 1085.0, currency: "TWD", companyName: "台積電" },
+    "2330.TW": { price: 1085.0, currency: "TWD", companyName: "台積電" },
     "NVDA": { price: 207.4, currency: "USD", companyName: "輝達 (NVIDIA)" },
     "QLD": { price: 92.5, currency: "USD", companyName: "那指兩倍槓桿 ETF (QLD)" },
     "AAPL": { price: 180.5, currency: "USD", companyName: "蘋果 (AAPL)" },
   };
 
-  // Determine Yahoo Finance ticker symbol
-  let yahooTicker = upperTicker;
-  if (!upperTicker.includes(".") && /^\d+[A-Z]?$/i.test(upperTicker)) {
-    // Numeric or numeric-ending-with-letter like 2330, 0050, 00631L -> Taiwan Stock Exchange (.TW)
-    yahooTicker = `${upperTicker}.TW`;
-  }
+  const isTaiwanStock = /^\d+[A-Z]?$/i.test(upperTicker);
+  const yahooTickersToTry = isTaiwanStock
+    ? [`${upperTicker}.TW`, `${upperTicker}.TWO`]
+    : [upperTicker];
 
-  // Tier 1: Try Yahoo Finance API
-  try {
-    console.log(`[Stock API] Attempting Yahoo Finance fetch for: ${yahooTicker}`);
-    const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-    const yahooRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooTicker}`, {
-      headers: {
-        "User-Agent": userAgent,
-      },
-    });
+  // Tier 1: Try Yahoo Finance API (.TW then .TWO)
+  for (const yahooTicker of yahooTickersToTry) {
+    try {
+      console.log(`[Stock API] Attempting Yahoo Finance fetch for: ${yahooTicker}`);
+      const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+      const yahooRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooTicker}`, {
+        headers: {
+          "User-Agent": userAgent,
+        },
+      });
 
-    if (yahooRes.ok) {
-      const data = await yahooRes.json() as any;
-      const result = data?.chart?.result?.[0];
-      const meta = result?.meta;
-      const price = meta?.regularMarketPrice;
-      const currency = meta?.currency;
+      if (yahooRes.ok) {
+        const data = await yahooRes.json() as any;
+        const result = data?.chart?.result?.[0];
+        const meta = result?.meta;
+        const price = meta?.regularMarketPrice || meta?.chartPreviousClose;
+        const currency = meta?.currency;
 
-      if (typeof price === "number" && price > 0) {
-        let companyName = meta?.longName || meta?.shortName || meta?.symbol || ticker;
-        // Clean up common suffix
-        if (companyName.endsWith(".TW")) {
-          companyName = companyName.substring(0, companyName.length - 3);
+        if (typeof price === "number" && price > 0) {
+          let companyName = meta?.longName || meta?.shortName || meta?.symbol || ticker;
+          companyName = companyName.replace(/\.(TW|TWO)$/i, "");
+          console.log(`[Stock API] Yahoo Finance success for ${yahooTicker}: ${price} ${currency}`);
+          return res.json({
+            price: price,
+            currency: currency || (isTaiwanStock ? "TWD" : "USD"),
+            companyName: companyName,
+          });
         }
-        console.log(`[Stock API] Yahoo Finance success for ${yahooTicker}: ${price} ${currency}`);
-        return res.json({
-          price: price,
-          currency: currency || (yahooTicker.endsWith(".TW") ? "TWD" : "USD"),
-          companyName: companyName,
-        });
       }
+    } catch (err: any) {
+      console.error(`[Stock API] Yahoo Finance failed for ${yahooTicker}:`, err?.message || err);
     }
-    console.warn(`[Stock API] Yahoo Finance returned non-ok status: ${yahooRes.status}`);
-  } catch (err: any) {
-    console.error(`[Stock API] Yahoo Finance failed for ${yahooTicker}:`, err?.message || err);
   }
 
   // Tier 2: Try Gemini Search Grounding API
@@ -100,12 +108,12 @@ app.get("/api/stock-price", async (req, res) => {
     console.log(`[Stock API] Attempting Gemini Search Grounding for: ${ticker}`);
     const ai = getAiClient();
     const prompt = `Find the latest stock price and trading currency for ticker "${ticker}". 
-If the ticker is Taiwan stock (e.g. numeric like 2330), lookup the Taiwan stock market (2330.TW). 
+If the ticker is Taiwan stock (e.g. numeric like 2330, 00631L, 00685L), lookup the Taiwan stock market (2330.TW or 00685L.TWO). 
 If it is US stock (e.g. NVDA, AAPL), lookup US market. 
 Please find the real, most up-to-date market price.`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -144,13 +152,11 @@ Please find the real, most up-to-date market price.`;
   }
 
   // Tier 3: Static Fallback Map (Ensures standard tickers work even if offline / blocked)
-  if (DEFAULT_STOCK_PRICES[upperTicker]) {
-    console.log(`[Stock API] Static Fallback matched for ${upperTicker}`);
-    return res.json(DEFAULT_STOCK_PRICES[upperTicker]);
-  }
-  if (DEFAULT_STOCK_PRICES[yahooTicker]) {
-    console.log(`[Stock API] Static Fallback matched for ${yahooTicker}`);
-    return res.json(DEFAULT_STOCK_PRICES[yahooTicker]);
+  const fallbackKeys = [upperTicker, `${upperTicker}.TW`, `${upperTicker}.TWO`].filter((k) => DEFAULT_STOCK_PRICES[k]);
+  if (fallbackKeys.length > 0) {
+    const matchedKey = fallbackKeys[0];
+    console.log(`[Stock API] Static Fallback matched for ${matchedKey}`);
+    return res.json(DEFAULT_STOCK_PRICES[matchedKey]);
   }
 
   // Tier 4: Generous generic fallback to prevent error

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { AssetItem, ASSET_CATEGORIES, CURRENCY_SYMBOLS } from "../types";
 import { Plus, Trash2, Edit2, Check, X, Info, Calculator, Percent, Coins, RefreshCw, Download, Upload } from "lucide-react";
+import { fetchClientStockPrice } from "../utils/stockApi";
 
 interface AssetTableProps {
   assets: AssetItem[];
@@ -41,11 +42,7 @@ export default function AssetTable({
     if (!ticker) return;
     setFetchingIds((prev) => ({ ...prev, [assetId]: true }));
     try {
-      const response = await fetch(`/api/stock-price?ticker=${encodeURIComponent(ticker)}`);
-      if (!response.ok) {
-        throw new Error(`伺服器錯誤 ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await fetchClientStockPrice(ticker);
       if (data && typeof data.price === "number" && data.price > 0) {
         // 更新該資產
         const updated = assets.map((asset) => {
@@ -88,9 +85,7 @@ export default function AssetTable({
       if (!asset.ticker) continue;
       setFetchingIds((prev) => ({ ...prev, [asset.id]: true }));
       try {
-        const response = await fetch(`/api/stock-price?ticker=${encodeURIComponent(asset.ticker)}`);
-        if (!response.ok) throw new Error("API error");
-        const data = await response.json();
+        const data = await fetchClientStockPrice(asset.ticker);
         if (data && typeof data.price === "number" && data.price > 0) {
           const shares = asset.shares !== undefined ? asset.shares : 1;
           currentAssets = currentAssets.map((item) => {
@@ -556,11 +551,7 @@ export default function AssetTable({
     }
     setIsFetchingNewPrice(true);
     try {
-      const response = await fetch(`/api/stock-price?ticker=${encodeURIComponent(ticker)}`);
-      if (!response.ok) {
-        throw new Error(`伺服器錯誤 ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await fetchClientStockPrice(ticker);
       if (data && typeof data.price === "number" && data.price > 0) {
         setNewAsset((prev) => ({
           ...prev,
